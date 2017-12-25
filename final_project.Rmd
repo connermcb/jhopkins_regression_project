@@ -1,0 +1,118 @@
+---
+title: "Motor Trend Analysis"
+author: "C. McBride"
+date: "December 24, 2017"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# load data
+library(datasets)
+data("mtcars")
+
+# load requisite packages
+library(dplyr)
+library(GGally)
+library(ggplot2)
+```
+
+```{r}
+str(mtcars)
+```
+
+
+## Executive Summary
+
+This report provides an analysis of the `mtcars` dataset and specifically looks for any significant association between the type of transmission (automatic or standard) a vehicle is equipped with and fuel efficiency as measured in miles/gallon. The methods of analysis were primarily used linear regression but also included exploratory plots, investigation of correlation to assist in feature selection, as well as statistical inference. The relevant R code, plots, and calculations can be found in the appendices. Results from the analysis show that while in the `mtcars` dataset fuel efficiency has an apparently significant association with transmission type, it is only marginal and not directly linked. When controlling for other factors such as vehicle weight, number of cylinders, and displacement the association between fuel efficiency and transmission type all disappears. These confounding factors are closely correlated with one another, which logically makes sense. The findings suggest that for reasons that aren't clear in the data, transmission type is also closely related to the three confounders. The highlights the primary limitation of the dataset and the analysis, a dataset with relatively few observations.
+
+## Motivating Questions
+
+_Motor Trend_ has asked that two motivating questions be addressed:
+
+__"Is an automatic or manual transmission better for MPG"__
+
+__"Quantify the MPG difference between automatic and manual transmissions"__
+
+In order to better prepare ourselves to answer these questions, we'll start with a survey of the data and the features it describes for each observation.
+
+## Exploratory Data Analysis
+
+The `mtcars` dataset has `r dim(mtcars)[2]` features describing `r dim(mtcars)[1]` unique make and model combinations of vehicles. To get an idea of the interactions between the different features, and in particular look for signs of a correlation between transmission type and fuel efficiency, we'll start the exploratory analysis with a paired plot (_fig. 1_). There appears to be a strong association between transmission type and fuel efficiency. However, is also strongly correlated with several other features (number of cylinders, displacement, and weight among others) that may better explain differences in fuel efficiency and therefore need to be addressed as confounders during modeling.
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, eval=FALSE}
+# pairs plot of mtcars features
+prs <- ggpairs(mtcars)
+prs
+```
+
+A density plot (_fig.2_) gives a better idea of how fuel efficiency measure are distributed by transmission type and shows that, at least marginally, the correlation is significant. We can further examine the correlation by constructing a linear model with miles/gallon as the response variable and transmission type as the predictor. 
+
+  
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+## distribution of mileages/gallon
+summary(mtcars$mpg)
+hist(log(mtcars$mpg), breaks=15)
+
+## density plot of mpg by transmission type
+mtcars$am <- relevel(as.factor(mtcars$am), ref=2)
+g <- ggplot()+
+  geom_density(data=mtcars,aes(x=mpg, color=factor(am))) +
+  labs(title="Fuel Efficiency (mpg) by Transmission Type")+
+  scale_color_manual(name="Transmission Type",
+                     labels=c("Automatic", "Manual"),
+                     values=c("#F8766D", "#00BFC4"))+
+  theme(panel.background = element_blank(), 
+        legend.position = c(1,1),
+        legend.justification = c(1,1),
+        legend.background = element_rect(color="black", fill="grey85"))
+
+aut_dens <- density(mtcars[mtcars$am==0,]$mpg)
+q95 <- quantile(mtcars[mtcars$am==0,]$mpg, probs=0.95)
+df_aut_dens <- data.frame(aut_dens$x, aut_dens$y)
+
+g + geom_area(data=subset(df_aut_dens, aut_dens.x >= q95),
+              aes(x=aut_dens.x, y=aut_dens.y), fill="#00BFC4", alpha=.25)+
+  geom_vline(xintercept = mean(mtcars[mtcars$am==1,]$mpg), 
+             size=1, color="black")
+```
+
+## Analysis
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# initial linear model with single predictor `am`
+fit1 <- lm(mpg ~ am, data=mtcars)
+
+```
+
+The model confirms what was demonstrated in the density plot that the two features are signficantly associated. The model also quantifies the linear difference as $\beta_1$, the slope coefficient which says that on average automatic transmission vehicles get `r abs(round(coef(fit1)[[2]], 2))` fewer mpg compared to manual transmission cars. The model appears to be a good fit, but as the pairs plot demonstrated there are several potential confounders, and the correlation might be coincidental. 
+
+Two of the most closely correlated with transmission, number of cylinders and displacement, would intuitively be closely correlated since the latter is naturally a function of the former. A simple scatter plot (_fig. 3_) shows a clear pattern and confirms this intuition. While there are some automatic cars with small 4 cylinders and small displacements there are far more in with large diplacements and 8 cylinders, both categories correlated with low fuel efficiency.
+
+```{r}
+# plot of displacement by number of cylinders
+plot(mtcars$cyl, mtcars$disp, col=factor(mtcars$am), pch=20,
+     main="Displacement by Number of Cylinders",
+     ylab="Diplacement (cu.in.)", xlab="No. of Cylinders")
+legend(4, 450, legend=c("automatic", "manual"), col = c("red", "black"), pch=20)
+```
+
+A similar pattern can be seen with weight. A plot of displacement by weight with points colored by number of cylinders shows how closely the three variables are correlated (_fig. 4_). All three variable track neatly together. For this reason, only the one that is most closely associated with fuel efficiency will be used. The correlations for weight, displacement, and number of cylinders respectively are `r round(cor(mtcars$wt, mtcars$mpg), 3)`, `r round(cor(mtcars$disp, mtcars$mpg), 3)`, and `r round(cor(factor(mtcars$cyl), mtcars$mpg), 3)`.
+
+
+
+```{r}
+# plot of weight by displacement colored by number of cylinders
+plot(mtcars$disp, mtcars$wt, col=mtcars$cyl)
+```
+
+
