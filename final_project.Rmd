@@ -1,9 +1,11 @@
 ---
 title: "Motor Trend Analysis"
-author: "C. McBride"
-date: "December 24, 2017"
+author: "Conner McBride"
 output:
-  pdf_document: default
+  pdf_document:
+    fig_width: 5
+    fig_height: 3
+    fig_caption: true
   html_document:
     df_print: paged
 ---
@@ -21,49 +23,171 @@ data("mtcars")
 library(dplyr)
 library(GGally)
 library(ggplot2)
+library(knitr)
+library(tibble)
+library(xtable)
 ```
 
-```{r}
-str(mtcars)
-```
 
 
 ## Executive Summary
 
-This report provides an analysis of the `mtcars` dataset and specifically looks for any significant association between the type of transmission (automatic or standard) a vehicle is equipped with and fuel efficiency as measured in miles/gallon. The methods of analysis were primarily used linear regression but also included exploratory plots, investigation of correlation to assist in feature selection, as well as statistical inference. The relevant R code, plots, and calculations can be found in the appendices. Results from the analysis show that while in the `mtcars` dataset fuel efficiency has an apparently significant association with transmission type, it is only marginal and not directly linked. When controlling for other factors such as vehicle weight, number of cylinders, and displacement the association between fuel efficiency and transmission type all disappears. These confounding factors are closely correlated with one another, which logically makes sense. The findings suggest that for reasons that aren't clear in the data, transmission type is also closely related to the three confounders. The highlights the primary limitation of the dataset and the analysis, a dataset with relatively few observations.
+This report provides an analysis of the `mtcars` dataset and specifically looks for any significant association between the type of transmission (automatic or standard) a vehicle is equipped with and fuel efficiency as measured in miles/gallon. The methods of analysis primarily use linear regression but also incorporate exploratory plots, investigation of correlation to assist in feature selection, as well as statistical inference (the relevant R code, plots, and calculations can be found in the appendices).
+
+Results from the analysis show that while in the `mtcars` dataset fuel efficiency has an apparently significant association with transmission type, it is only marginal and not directly linked. When controlling for other factors such as vehicle weight, number of cylinders, and displacement the association between fuel efficiency and transmission type all but disappears. These confounding factors are closely correlated with one another, which logically makes sense. 
 
 ## Motivating Questions
 
-_Motor Trend_ has asked that two motivating questions be addressed:
+The editors at _Motor Trend_ have posed two motivating questions:
 
-__"Is an automatic or manual transmission better for MPG"__
+  __Is an automatic or manual transmission better for MPG?__
 
-__"Quantify the MPG difference between automatic and manual transmissions"__
+  __Quantify the MPG difference between automatic and manual transmissions.__
 
-In order to better prepare ourselves to answer these questions, we'll start with a survey of the data and the features it describes for each observation.
+In order to better prepare to answer these questions, we'll start with a survey of the data and the features describing each observation.
 
 ## Exploratory Data Analysis
 
-The `mtcars` dataset has `r dim(mtcars)[2]` features describing `r dim(mtcars)[1]` unique make and model combinations of vehicles. To get an idea of the interactions between the different features, and in particular look for signs of a correlation between transmission type and fuel efficiency, we'll start the exploratory analysis with a paired plot (_fig. 1_). There appears to be a strong association between transmission type and fuel efficiency. However, is also strongly correlated with several other features (number of cylinders, displacement, and weight among others) that may better explain differences in fuel efficiency and therefore need to be addressed as confounders during modeling.
+The `mtcars` dataset has `r dim(mtcars)[2]` features describing `r dim(mtcars)[1]` unique make and model combinations of vehicles. To get an idea of the interactions between the different features, and in particular look for signs of a correlation between transmission type and fuel efficiency, we'll start the exploratory analysis with a paired plot ([_fig. 1_](#figure-1)). 
+
+There appears to be a strong association between transmission type and fuel efficiency. However, transmission type is also strongly correlated with several other features (number of cylinders, displacement, and weight among others) all of which may better explain differences in fuel efficiency and therefore need to be addressed as confounders during modeling.
+
+A density plot ([_fig.2_](#figure-2)) gives a better idea of how fuel efficiency measure are distributed by transmission type and shows that, at least marginally, the correlation is significant. We can further examine the correlation by constructing a simple single variable linear model with miles/gallon as the response variable and transmission type as the predictor. 
 
 
+## Analysis
 
-```{r echo=FALSE, message=FALSE, warning=FALSE, eval=FALSE}
-# pairs plot of mtcars features
-prs <- ggpairs(mtcars)
-prs
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# initial linear model with single predictor `am`
+fit1 <- lm(mpg ~ am, data=mtcars)
 ```
 
-A density plot (_fig.2_) gives a better idea of how fuel efficiency measure are distributed by transmission type and shows that, at least marginally, the correlation is significant. We can further examine the correlation by constructing a linear model with miles/gallon as the response variable and transmission type as the predictor. 
+The model confirms what was demonstrated in the density plot that the two features - gas mileage and transmission type - are signficantly associated. The model also quantifies the linear difference in $\beta_1$, the slope coefficient, which says that on average automatic transmission vehicles get `r abs(round(coef(fit1)[[2]], 2))` fewer miles/gallon compared to manual transmission cars. The model appears to demonstrate a significant association, but as the pairs plot demonstrated there are several potential confounders, and the correlation might be coincidental. 
 
-  
+Two of the features most closely correlated with transmission, number of cylinders and displacement, would intuitively be close covariates since the latter is naturally a function of the former. A simple scatter plot ([_fig. 3_](#figure-3)) shows a clear pattern and confirms this intuition. While there are some automatic cars with small 4 cylinders and small displacements there are far more in with large diplacements and 8 cylinders, both categories correlated with low fuel efficiency.
 
+A similar pattern can be seen with weight. A plot of displacement by weight with points colored by number of cylinders shows how closely the three variables are correlated ([_fig. 4_](#figure-4)). All three variable track neatly together. For this reason, only the one that is most closely associated with fuel efficiency will be used. The correlations for weight, displacement, and number of cylinders respectively are `r round(cor(mtcars$wt, mtcars$mpg), 3)`, `r round(cor(mtcars$disp, mtcars$mpg), 3)`, and `r round(cor(mtcars$cyl, mtcars$mpg), 3)`.
+
+The intuition is that although it appeared to be strongly correlated to fuel efficiency in the naive model, transmission type will be insignificant when weight is added to the model. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# linear model that now includes weight as a controlling factor
+fit2 <- lm(mpg ~ factor(am) + wt, data=mtcars)
+```
+
+Using an additive error, multivariable linear model (_$Y_i$ = $\beta_{tr}X_{i_{tr}}$ + $\beta_{wt}X_{i_{wt}}$_) with weight added as a predictor the coefficient for automatic transmission is near zero ($\beta_{atr}$ = `r round(coef(fit2)[[2]], 3)`) indicating a neglible difference in the average fuel efficiency between automatic and manual transmission vehicles featured in the dataset when weight is accounted for. Based on the strong correlation that we established between weight and number of cylinders and displacement, we could expect similar results if we included either of the latter two in place of weight. For the same reasons, and to keep the variance of the standard error as low as possible, we'll leave the latter two out of the model.
+
+A residuals and qq plot([_fig.5_](#figure-5)) reveal a few candidate outliers with residuals approximately equal to or greater than the coefficient $\beta_1$ we had in the naive model and some minor issues with normality in the distribution of the residuals.
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+## create dataframe with means of numeric features grouped by cylinder count
+# vector of variables to summarize
+num_features <- c("cyl", "disp", "hp", "drat", "wt", "qsec", "gear", "carb")
+
+# group data by cyl and summarize selected features, means
+mns <- mtcars[mtcars$cyl != 6,]%>%
+  group_by(cyl)%>%
+  summarize(disp=mean(disp), hp=mean(hp), 
+            drat=mean(drat), wt=mean(wt), 
+            qsec=mean(qsec), gear=mean(gear), 
+            carb=mean(carb))
+
+# add column with names for each row
+mns <- cbind(c("Means 4cyl", "Means 8cyl"), mns)
+colnames(mns)[1] <- " "
+
+# vector of outliers from residuals plot, subset on outliers
+outlier_names <- c("Chrysler Imperial","Fiat 128", "Toyota Corolla")
+outliers <- mtcars[outlier_names, num_features]
+outliers <- rownames_to_column(outliers, var=" ")
+
+# bind means dataframe and outliers
+outliers_sumry <- rbind(mns, outliers)
+kable(outliers_sumry, digits=3, 
+      caption="Comparison of Outliers & Grouped Means")
+
+```
+
+Comparing the values for the three outliers with the grouped summaries, a few things stand out. The three cars vary from the mean in their displacement (and consequently horsepower) and weight most notably. Adding displacement to the model might draw these outliers in, but as we've already detected, that variable is a covariate of weight already. Instead, we'll look at quarter-mile time to see if this measure of acceleration captures some of the variation not explained by weight.
+
+A scatter plot ([_fig.6_](#figure-6)), as a preliminary diagnostic, shows the relationship between fuel efficiency and acceleration with weight (rounded to the nearest integer) encoded with color. The regression line runs parallel to a single weight class, suggesting that it's nearly orthogonal to the regression line found in the model that includes weight. 
+
+To further test acceleration as a model component for explaining some of the variation not covered by weight and transmission type, and seen in the outliers, we'll contruct a third model that includes acceleration. 
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+fit3 <- lm(mpg ~ factor(am) + wt + qsec, data=mtcars)
+
+anvar <- anova(fit2, fit3)
+
+pvalue <- anvar$'Pr(>F)'[2]
+```
+
+An analysis of variance test (ANOVA) shows a significant difference between our second model and the new model that includes acceleration ($F_{av}$ = `r round(anvar$F[2], 3)`, $p_{av}$ = 0.0002). A plot of the new residuals ([_fig.7_](#figure-7)) shows an improvement in all model assessment metrics, although the three cars that motivated the new model remain outliers. A plot of the standardized residuals ([_fig.7_](#figure-7)) shows a pattern hinting at a missing component in the model. Nonetheless, analysis of variance tests on models including other features of the data show no significant difference over the model with transmission type, weight and acceleration. This points to a explanatory feature missing from the data.
+
+## Outliers - Leverage & Influence
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+hvs_fit3 <- hatvalues(fit3)
+
+dff_fit3 <- dffits(fit3)
+
+dfbts_fit3 <- dfbetas(fit3)
+
+fit4 <- lm(mpg~factor(am) + wt + qsec, 
+           data=mtcars[rownames(mtcars) != "Chrysler Imperial",])
+
+kable(summary(fit4)$coef, digits = 3, caption="Coefficients of Finalized Model")
+
+```
+
+As a final diagnotic, we'll look once more at the three outliers to see if they have an undue influence on the regression line. After running three tests, The _Chrysler Imperial_ has the maximum value in two of them dfbetas and dffits. The other two don't appear to influence the regression line as significantly. For this reason, we'll eliminate the _Chrysler_ and refit our last model. This will be the finalized model.
+
+## Conclusions
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+PRESS <- sapply(list(fit1, fit2, fit3, fit4), 
+                function(mdl){sum(rstandard(mdl, type="pred")^2)})
+
+mdls <- c("Model 1", "Model 2", "Model 3", "Rmv Outlier")
+predictors <- c("am", "am + wt", "am + wt + qsec", "am + wt + qsec")
+
+rdf <- cbind(mdls, predictors, round(PRESS, 3))
+colnames(rdf) <- c("Model", "Predictors", "PRESS")
+```
+
+The findings suggest that, for reasons that aren't clear in the data, transmission type is also closely related to the three confounders. This highlights the primary limitation of the dataset and the analysis, a dataset with relatively few observations.
+
+In response to the motivating questions posed by _Motor Trend_, within the context of the `mtcars` dataset and without controlling for other variables, automatic transmission is associated with worse gas mileage not better. The difference was captured in our first, naive linear model which calculated the difference in means to be `r coef(fit1)[1]`mpg. When including a weight in the linear model there is almost no apparent relationship between fuel efficiency and transmission type. The final model was further improved by including acceleration as a second principle component, and by removing a influential outlier.
+
+`r kable(rdf, digits=1, caption="Predictive Sum of Squares by Model")`
+
+Using predictive sum of squares as a comparative measure of model performance, the progressive improvement in models is clear. 
+
+### Confidence Intervals
+
+
+$\pagebreak$
+
+## Appendices
+
+### Appendix i: Figures
+
+#### Figure 1
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# pairs plot of mtcars features
+ggpairs(mtcars)
+```
+
+
+
+#### Figure 2
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE}
-## distribution of mileages/gallon
-summary(mtcars$mpg)
-hist(log(mtcars$mpg), breaks=15)
-
 ## density plot of mpg by transmission type
 mtcars$am <- relevel(as.factor(mtcars$am), ref=2)
 g <- ggplot()+
@@ -87,19 +211,9 @@ g + geom_area(data=subset(df_aut_dens, aut_dens.x >= q95),
              size=1, color="black")
 ```
 
-## Analysis
+#### Figure 3
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
-# initial linear model with single predictor `am`
-fit1 <- lm(mpg ~ am, data=mtcars)
-
-```
-
-The model confirms what was demonstrated in the density plot that the two features are signficantly associated. The model also quantifies the linear difference as $\beta_1$, the slope coefficient which says that on average automatic transmission vehicles get `r abs(round(coef(fit1)[[2]], 2))` fewer mpg compared to manual transmission cars. The model appears to be a good fit, but as the pairs plot demonstrated there are several potential confounders, and the correlation might be coincidental. 
-
-Two of the most closely correlated with transmission, number of cylinders and displacement, would intuitively be closely correlated since the latter is naturally a function of the former. A simple scatter plot (_fig. 3_) shows a clear pattern and confirms this intuition. While there are some automatic cars with small 4 cylinders and small displacements there are far more in with large diplacements and 8 cylinders, both categories correlated with low fuel efficiency.
-
-```{r}
 # plot of displacement by number of cylinders
 plot(mtcars$cyl, mtcars$disp, col=factor(mtcars$am), pch=20,
      main="Displacement by Number of Cylinders",
@@ -107,54 +221,39 @@ plot(mtcars$cyl, mtcars$disp, col=factor(mtcars$am), pch=20,
 legend(4, 450, legend=c("automatic", "manual"), col = c("red", "black"), pch=20)
 ```
 
-A similar pattern can be seen with weight. A plot of displacement by weight with points colored by number of cylinders shows how closely the three variables are correlated (_fig. 4_). All three variable track neatly together. For this reason, only the one that is most closely associated with fuel efficiency will be used. The correlations for weight, displacement, and number of cylinders respectively are `r round(cor(mtcars$wt, mtcars$mpg), 3)`, `r round(cor(mtcars$disp, mtcars$mpg), 3)`, and `r round(cor(mtcars$cyl, mtcars$mpg), 3)`.
+#### Figure 4
 
-
-
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 # plot of weight by displacement colored by number of cylinders
 plot(mtcars$disp, mtcars$wt, col=mtcars$cyl, pch=as.integer(mtcars$am))
 ```
 
-The intuition is that although it appeared to be strongly correlated to fuel efficiency in the naive model, transmission type will be insignificant when weight is added to the model. 
+#### Figure 5
 
-```{r}
-# linear model that now includes weight as a controlling factor
-fit2 <- lm(mpg ~ factor(am) + wt, data=mtcars)
-
-```
-
-The coefficient for automatic transmission is near zero ($\beta_{AT}$=`r coef(fit2)[2]`) indicating a neglible difference in the average fuel efficiency between automatic and manual transmission vehicles featured in the dataset when weight is accounted for. Based on the strong correlation that we established between weight and number of cylinders and displacement, we could expect similar results if we included either of the latter two in place of weight.
-
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 # residuals plots
-par(mfrow=c(1,1))
-plot(fit2, which=c(1))
-abline(h=0, lty=2, col="blue")
-```
-
-There are a few candidate outliers with residuals greater than the coefficient $\beta_1$ we had in the naive model. 
-
-```{r}
-# hat values of outliers
-summary(hatvalues(fit2))
-hatvalues(fit2)
+par(mfrow=c(1,2))
 plot(fit2, which=1)
-mtcars[c("Chrysler Imperial","Fiat 128", "Toyota Corolla"),]
-mean(mtcars$wt)
+abline(h=0, lty=2, col="blue")
+plot(fit2, which=2)
 ```
 
-```{r}
-fit3 <- lm(mpg ~ factor(am) + wt + carb, data=mtcars)
-plot(fit3, which=1)
-hatvalues(fit3)
-plot(predict(fit3), resid(fit3))
+#### Figure 6
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# scatterplot of covariates
+plot(mtcars$qsec, mtcars$mpg, col=mtcars$wt, pch=20)
+abline(lm(mpg~qsec, data=mtcars))
+text(mtcars$qsec, mtcars$mpg, rownames(mtcars), cex = 0.5, pos=2)
+text(mtcars$qsec, mtcars$mpg, mtcars$wt, cex = 0.5, pos=4)
+
+fit <- lm(mpg~factor(am) + wt + qsec, data=mtcars)
+plot(fit, which=1)
 ```
 
-## Conclusions
 
-In response to the motivating questions posed by _Motor Trend_, within the context of the `mtcars` dataset and without controlling for other variables, automatic transmission is associated with worse gas mileage not better. The difference was captured in our first, naive linear model which calculated the difference in means to be `r coef(fit1)[1]`mpg, that is on average automatic transmission vehicles in the dataset have mileage measures over 7mpg lower than manual cars. As was shown, though, these results are irrelevant, because the several inter-correlated factors better explain the differences in gas mileage. When including a representative factor from this group in the linear model there is almost no apparent relationship between fuel efficiency and transmission type. The final model was further improved by including factors the exceptional cases of what were likely high-performance cars.
+#### Appendix ii: Code
 
-## Confidence Intervals
+
 
 
