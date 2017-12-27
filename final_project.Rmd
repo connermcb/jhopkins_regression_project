@@ -2,12 +2,12 @@
 title: "Motor Trend Analysis"
 author: "Conner McBride"
 output:
-  pdf_document: default
   html_document:
     df_print: paged
+  pdf_document: default
 ---
 
-```{r setup, include=FALSE}
+```{r include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -31,7 +31,7 @@ library(xtable)
 
 This report provides an analysis of the `mtcars` dataset and specifically looks for any significant association between the type of transmission (automatic or standard) a vehicle is equipped with and fuel efficiency as measured in miles/gallon. The methods of analysis primarily use linear regression but also incorporate exploratory plots, investigation of correlation to assist in feature selection, as well as statistical inference (the relevant R code, plots, and calculations can be found in the appendices).
 
-Results from the analysis show that while in the `mtcars` dataset fuel efficiency has an apparently significant association with transmission type, it is only marginal and not directly linked. When controlling for other factors such as vehicle weight, number of cylinders, and displacement the association between fuel efficiency and transmission type all but disappears. These confounding factors are closely correlated with one another, which logically makes sense. 
+Results from the analysis show that while in the `mtcars` dataset fuel efficiency has an apparently significant association with transmission type, it is only marginal and not directly linked. When controlling for other factors such as vehicle weight, number of cylinders, and displacement the association between fuel efficiency and transmission type all but disappears. 
 
 ## Exploratory Data Analysis
 
@@ -48,9 +48,9 @@ A density plot ([_fig.2_](#figure-2)) gives a better idea of how fuel efficiency
 fit1 <- lm(mpg ~ am, data=mtcars)
 ```
 
-The model confirms what was demonstrated in the density plot that the two features - gas mileage and transmission type - are signficantly associated. The model also quantifies the linear difference in $\beta_1$, the slope coefficient, which says that on average automatic transmission vehicles get `r abs(round(coef(fit1)[[2]], 2))` fewer miles/gallon compared to manual transmission cars. The model appears to demonstrate a significant association, but as the pairs plot demonstrated there are several potential confounders.
+The naive, single-variable model ($Y_{mpg} = \beta_0 + \beta_1X_{am}$) confirms what was demonstrated in the density plot that the two features - gas mileage and transmission type - are signficantly associated. The model also quantifies the linear difference in $\beta_1$, the slope coefficient, which says that on average automatic transmission vehicles get `r abs(round(coef(fit1)[[2]], 2))` fewer miles/gallon compared to manual transmission cars. The model appears to demonstrate a significant association, but as the pairs plot demonstrated there are several potential confounders.
 
-Two of the features most closely correlated with transmission, number of cylinders and displacement, would intuitively be close covariates since the latter is naturally a function of the former. A simple scatter plot ([_fig. 3_](#figure-3)) shows a clear pattern and confirms this intuition. While there are some automatic cars with small 4 cylinders and small displacements there are far more in with large diplacements and 8 cylinders, both categories correlated with low fuel efficiency.
+Two of the features most closely correlated with transmission, number of cylinders and displacement, would intuitively be close covariates since the latter is naturally a function of the former. A simple scatter plot ([_fig. 3_](#figure-3)) shows a clear pattern and confirms this intuition. While there are some automatic cars with 4 cylinders and small displacements there are far more in with large diplacements and 8 cylinders, both categories correlated with low fuel efficiency.
 
 A similar pattern can be seen with weight. A plot of displacement by weight with points colored by number of cylinders shows how closely the three variables are correlated ([_fig. 4_](#figure-4)). For this reason, only the one that is most closely associated with fuel efficiency will be used. The correlations for weight, displacement, and number of cylinders respectively are `r round(cor(mtcars$wt, mtcars$mpg), 3)`, `r round(cor(mtcars$disp, mtcars$mpg), 3)`, and `r round(cor(mtcars$cyl, mtcars$mpg), 3)`.
 
@@ -61,7 +61,7 @@ Our intuition based on the above is that transmission type will be insignificant
 fit2 <- lm(mpg ~ factor(am) + wt, data=mtcars)
 ```
 
-Using an additive error, multivariable linear model (_$Y_i$ = $\beta_{tr}X_{i_{tr}}$ + $\beta_{wt}X_{i_{wt}}$_) with weight added as a predictor the coefficient for automatic transmission is near zero ($\beta_{atr}$ = `r round(coef(fit2)[[2]], 3)`) indicating a neglible difference in the average fuel efficiency between automatic and manual transmission vehicles featured in the dataset when weight is accounted for. 
+Using an additive error, multivariable linear model (_$Y_{mpg} = \beta_0 +\beta_{am}X_{tr}$ + $\beta_{wt}X_{wt}$_) with weight added as a predictor the coefficient for automatic transmission is near zero ($\beta_{atr}$ = `r round(coef(fit2)[[2]], 3)`) indicating a neglible difference in the average fuel efficiency between automatic and manual transmission vehicles featured in the dataset when weight is accounted for. 
 
 A residuals and qq plot([_fig.5_](#figure-5)) reveal a few candidate outliers with residuals approximately equal to or greater than the coefficient $\beta_1$ we had in the naive model and some minor issues with normality in the distribution of the residuals.
 
@@ -94,62 +94,63 @@ kable(outliers_sumry, digits=3,
 
 ```
 
-Comparing the values for the three outliers with the grouped summaries, a few things stand out. The three cars vary from the mean in their displacement (and consequently horsepower) and weight most notably. Adding displacement to the model might draw these outliers in, but as we've already detected, that variable is a covariate of weight already. Instead, we'll look at quarter-mile time to see if this measure of acceleration captures some of the variation not explained by weight.
+Comparing the values for the three outliers with the grouped summaries, a few things stand out. The three cars vary from the mean in their displacement (and consequently horsepower) and weight most notably. Adding displacement to the model might draw these outliers in, but as we've already detected, that variable is a covariate of weight already. Instead, we'll look at quarter-mile time (_qsec_) to see if this measure of acceleration captures some of the variation not explained by weight.
 
 A scatter plot ([_fig.6_](#figure-6)), as a preliminary diagnostic, shows the relationship between fuel efficiency and acceleration with weight (rounded to the nearest integer) encoded with color. The regression line runs parallel to a single weight class, suggesting that it's nearly orthogonal to the regression line found in the model that includes weight. We'll contruct a third model that includes acceleration. 
 
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
+# create linear model with weight and acceleration added to predictors
 fit3 <- lm(mpg ~ factor(am) + wt + qsec, data=mtcars)
 
+# analysis of variance of second and third models
 anvar <- anova(fit2, fit3)
 
-pvalue <- anvar$'Pr(>F)'[2]
 ```
 
-An analysis of variance test (ANOVA) shows a significant difference between our second model and the new model that includes acceleration ($F_{av}$ = `r round(anvar$F[2], 3)`, $p_{av}$ = 0.0002). A plot of the new residuals ([_fig.7_](#figure-7)) shows an improvement in all model assessment metrics, although the three cars that motivated the new model remain outliers. A plot of the standardized residuals ([_fig.7_](#figure-7)) shows a pattern hinting at a missing component in the model. This points to a explanatory feature missing from the data.
+An analysis of variance test (ANOVA) shows a significant difference between our second model and the new model that includes acceleration ($F_{av}$ = `r round(anvar$F[2], 3)`, $p_{av}$ = 0.0002). A plot of the new residuals ([_fig.7_](#figure-7)) shows an improvement in all model assessment metrics, although the three cars that motivated the new model remain outliers. A plot of the standardized residuals ([_fig.7_](#figure-7)) shows a pattern hinting at a missing component in the model and may point to a explanatory feature missing from the data.
 
 ## Outliers - Leverage & Influence
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
+# test change in hat values for each observation if removed from data
 hvs_fit3 <- hatvalues(fit3)
 
+# test influence of each observation
 dff_fit3 <- dffits(fit3)
-
 dfbts_fit3 <- dfbetas(fit3)
 
+# recreate model 3 using revised dataset
 fit4 <- lm(mpg~factor(am) + wt + qsec, 
            data=mtcars[rownames(mtcars) != "Chrysler Imperial",])
 
+# output pretty table of coefficients
 kable(summary(fit4)$coef, digits = 3, caption="Coefficients of Finalized Model")
-
+summary(fit3)
 ```
 
-As a final diagnotic, we'll look once more at the three outliers to see if they have an undue influence on the regression line. After running three tests, The _Chrysler Imperial_ has the maximum value in two of them dfbetas and dffits. The other two don't appear to influence the regression line as significantly. For this reason, we'll eliminate the _Chrysler_ and refit our last model. This will be the finalized model.
+As a final diagnotic, we'll look once more at the three outliers to see if they have an undue influence on the regression line. After running three tests, The _Chrysler Imperial_ has the maximum value in two of them _dfbetas_ and _dffits_. The other two don't appear to influence the regression line as significantly. For this reason, we'll eliminate the _Chrysler_ and refit our last model. This will be the finalized model. 
 
 ## Conclusions
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
+# calculate predictive sum of squares for each model
 PRESS <- sapply(list(fit1, fit2, fit3, fit4), 
                 function(mdl){sum(rstandard(mdl, type="pred")^2)})
 
+# create data frame with PRESS values
 mdls <- c("Model 1", "Model 2", "Model 3", "Rmv Outlier")
 predictors <- c("am", "am + wt", "am + wt + qsec", "am + wt + qsec")
-
 rdf <- cbind(mdls, predictors, round(PRESS, 3))
 colnames(rdf) <- c("Model", "Predictors", "PRESS")
 ```
 
-The findings suggest that, for reasons that aren't clear in the data, transmission type is also closely related to the three confounders. __*In response to the motivating questions posed by _Motor Trend_, within the context of the `mtcars` dataset and without controlling for other variables, automatic transmission is associated with worse gas mileage not better.*__ 
+The findings suggest that, for reasons that aren't clear in the data, transmission type is also closely related to the three confounders. __In response to the motivating questions posed by _Motor Trend_, within the context of the `mtcars` dataset and without controlling for other variables, automatic transmission is associated with worse gas mileage not better. However, transmission type has almost no predictive power when other variables are included in the model.__ 
 
 `r kable(rdf, digits=1, caption="Predictive Sum of Squares by Model")`
 
 Using predictive sum of squares as a comparative measure of model performance, the progressive improvement in models is clear. 
 
-### Confidence Intervals
-
-
-$\pagebreak$
 
 ## Appendices
 
@@ -162,11 +163,11 @@ $\pagebreak$
 ggpairs(mtcars)
 ```
 
-
+$\pagebreak$
 
 #### Figure 2
 
-```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=3, fig.width=4}
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=4, fig.width=6}
 ## density plot of mpg by transmission type
 mtcars$am <- relevel(as.factor(mtcars$am), ref=2)
 g <- ggplot()+
@@ -177,6 +178,8 @@ g <- ggplot()+
                      values=c("#F8766D", "#00BFC4"))+
   theme(panel.background = element_blank(), 
         legend.position = c(1,1),
+        legend.title = element_text(size=8),
+        legend.text = element_text(size = 8),
         legend.justification = c(1,1),
         legend.background = element_rect(color="black", fill="grey85"))
 
@@ -190,10 +193,12 @@ g + geom_area(data=subset(df_aut_dens, aut_dens.x >= q95),
              size=1, color="#F8766D")
 ```
 
+ 
 #### Figure 3
 
-```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=4,fig.width=5}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=4,fig.width=6}
 # plot of displacement by number of cylinders
+par(mfrow=c(1,1), mar=c(4, 4, 3, 2)+0.1)
 plot(mtcars$cyl, mtcars$disp, col=factor(mtcars$am), pch=20,
      main="Displacement by Number of Cylinders",
      ylab="Diplacement (cu.in.)", xlab="No. of Cylinders")
@@ -202,16 +207,21 @@ legend(4, 450, legend=c("automatic", "manual"), col = c("red", "black"), pch=20)
 
 #### Figure 4
 
-```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=5}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=6}
 # plot of weight by displacement colored by number of cylinders
-plot(mtcars$disp, mtcars$wt, col=mtcars$cyl, pch=as.integer(mtcars$am))
+plot(mtcars$disp, mtcars$wt, col=mtcars$cyl, pch=as.integer(mtcars$am),
+     main="Displacement by Weight",
+     ylab="Weight (tons)", xlab="Displacement (cu.in.)")
+legend(72,5.3, legend=c("Automatic", "Manual"), pch=c(2,1))
+legend(385,2.8, legend=c("4cyl", "6cyl", "8cyl"), c("blue", "magenta", "gray"))
 ```
+
 
 #### Figure 5
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=6}
 # residuals plots
-par(mfrow=c(1,2))
+par(mfrow=c(2, 1), mar=c(2, 2, 2, 2))
 plot(fit2, which=1)
 abline(h=0, lty=2, col="blue")
 plot(fit2, which=2)
@@ -219,17 +229,20 @@ plot(fit2, which=2)
 
 #### Figure 6
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=6}
 # scatterplot of covariates
-plot(mtcars$qsec, mtcars$mpg, col=mtcars$wt, pch=20)
+plot(mtcars$qsec, mtcars$mpg, col=mtcars$wt, pch=20,
+     main="Acceleration by Miles/Gallon")
 abline(lm(mpg~qsec, data=mtcars))
 text(mtcars$qsec, mtcars$mpg, rownames(mtcars), cex = 0.5, pos=2)
 text(mtcars$qsec, mtcars$mpg, mtcars$wt, cex = 0.5, pos=4)
+legend(22.1, 20, legend=c("1", "2", "3", "4", "5"),
+       fill=palette()[1:5], title="Int of WT", cex = 0.7)
 ```
 
 #### Figure 7
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=6}
 fit <- lm(mpg~factor(am) + wt + qsec, data=mtcars)
 plot(fit, which=1)
 ```
@@ -237,6 +250,8 @@ plot(fit, which=1)
 
 #### Appendix ii: Code
 
+```{r code=readLines(knitr::purl('final_project.Rmd', documentation = 0)), eval = FALSE}
 
+```
 
 
